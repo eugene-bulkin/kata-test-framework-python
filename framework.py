@@ -1,195 +1,172 @@
 import re
-import inspect
-import sys
 
 class Test(object):
-    # properties
-    def __init__(self):
-        self.__describing = False
-        self.__html = []
-        self.__allowed = ["describe", "it", "expect"]
-        self.__correct = 0
-        self.__incorrect = 0
-        self.__failed = []
+  def __init__(self):
+    self.__describing = False
+    self.__html = []
+    self.__correct = 0
+    self.__incorrect = 0
+    self.__failed = []
 
-    def __checkAllowed(self, stack):
-        if "_Test__allowed" in stack[1][0].f_locals:
-            return True
-        caller = str(stack[1][0].f_locals["self"].__class__).split(".")[1]
-        return caller in self.__allowed
+  @property
+  def describing(self):
+    return self.__describing
+  @describing.setter
+  def describing(self, value):
+    self.__describing = value
 
-    @property
-    def describing(self):
-        if self.__checkAllowed(inspect.stack()):
-            return self.__describing
-    @describing.setter
-    def describing(self, value):
-        if self.__checkAllowed(inspect.stack()):
-            self.__describing = value
+  @property
+  def html(self):
+    return self.__html
+  @html.setter
+  def html(self, value):
+    self.__html = value
 
-    @property
-    def html(self):
-        if self.__checkAllowed(inspect.stack()):
-            return self.__html
-    @html.setter
-    def html(self, value):
-        if self.__checkAllowed(inspect.stack()):
-            self.__html = value
+  @property
+  def correct(self):
+    return self.__correct
+  @correct.setter
+  def correct(self, value):
+    self.__correct = value
 
-    @property
-    def correct(self):
-        if self.__checkAllowed(inspect.stack()):
-            return self.__correct
-    @correct.setter
-    def correct(self, value):
-        if self.__checkAllowed(inspect.stack()):
-            self.__correct = value
+  @property
+  def incorrect(self):
+    return self.__incorrect
+  @incorrect.setter
+  def incorrect(self, value):
+    self.__incorrect = value
 
-    @property
-    def incorrect(self):
-        if self.__checkAllowed(inspect.stack()):
-            return self.__incorrect
-    @incorrect.setter
-    def incorrect(self, value):
-        if self.__checkAllowed(inspect.stack()):
-            self.__incorrect = value
+  @property
+  def failed(self):
+    return self.__failed
+  @failed.setter
+  def failed(self, value):
+    self.__failed = value
 
-    @property
-    def failed(self):
-        if self.__checkAllowed(inspect.stack()):
-            return self.__failed
-    @failed.setter
-    def failed(self, value):
-        if self.__checkAllowed(inspect.stack()):
-            self.__failed = value
+  class describe(object):
+    def __init__(self, msg):
+      if Test.describing:
+        raise Exception("Cannot call describe within another describe")
+      self.msg = msg
 
-    @staticmethod
-    def logFilter(msg, lf=None):
-        if not Test._Test__checkAllowed(inspect.stack()):
-            return
+    def __call__(self, fn):
+      Test.describing = True
+      Test.html.append(Test.logFilter('<div class="console-describe"><h6>'))
+      Test.html.append(self.msg) #_message(msg)
+      Test.html.append(Test.logFilter(':</h6>'))
+      fn()
+      Test.html.append(Test.logFilter('</div>'))
+      print ''.join(Test.html)
+      Test.html = []
+      Test.describing = False
+      if len(Test.failed) > 0:
+        raise Test.failed[0]
 
-        m = re.sub('/<[^>].*>/g', '', msg)
-        if len(m) == 0 and not lf:
-            return ""
+  class it(object):
+    def __init__(self, msg):
+      self.msg = msg
+
+    def __call__(self, fn):
+      Test.html.append(Test.logFilter('<div class="console-it"><h6>'))
+      Test.html.append(self.msg) #_message(msg)
+      Test.html.append(Test.logFilter(':</h6>'))
+      fn()
+      Test.html.append(Test.logFilter('</div>'))
+
+  @staticmethod
+  def logFilter(msg, lf=None):
+    m = re.sub('/<[^>].*>/g', '', msg)
+    if len(m) == 0 and not lf:
+      return ""
+    else:
+      return m + "\n"
+
+  @staticmethod
+  def inspect(obj):
+    #logCall('inspect')
+    return obj
+
+  @staticmethod
+  def expect(passed, msg=None, options={}):
+    if passed:
+      successMsg = "Test Passed"
+      if "successMsg" in options.keys() and options["successMsg"]:
+        successMsg += ": " + options["successMsg"]
+      print Test.html.append(Test.logFilter('<div class="console-passed">') + successMsg + \
+        Test.logFilter('</div>', True))
+      Test.correct += 1
+    else:
+      # if _message(msg):
+      #     msg = _message(msg)
+      # else:
+      #     msg = "Invalid"
+      if "extraCredit" in options.keys() and options["extraCredit"]:
+        if options["extraCredit"] != True:
+          msg = options["extraCredit"]
         else:
-            return m + "\n"
+          msg = ""
+        msg = ": ".join(filter(lambda s: s is not '', ["Test Missed:", msg]))
+      else:
+          Test.html.append('%s%s%s' % (Test.logFilter("<div class='console-failed'>Test Failed: "), msg, Test.logFilter("</div>", True)))
+          error = Exception(msg)
+          if Test.describing:
+            Test.failed.append(error)
+          else:
+            raise error
 
-    @staticmethod
-    def inspect(obj):
-        #logCall('inspect')
-        return obj
+  @staticmethod
+  def assertEquals(actual, expected, msg=None, options={}):
+    #logCall('assertEquals')
+    if actual != expected:
+      msg = 'Expected: %s, instead got: %s' % (Test.inspect(expected), Test.inspect(actual))
+      Test.expect(False, msg, options)
+    else:
+      if "successMsg" not in options.keys():
+        options["successMsg"] = "Value == %s" % Test.inspect(expected)
+      Test.expect(True, None, options)
 
-    @staticmethod
-    def expect(passed, msg=None, options={}):
-        __allowed = "expect"
-        if passed:
-            successMsg = "Test Passed"
-            if "successMsg" in options.keys() and options["successMsg"]:
-                successMsg += ": " + options["successMsg"]
-            print Test.logFilter('<div class="console-passed">') + successMsg + \
-                  Test.logFilter('</div>', True)
-            Test.correct += 1
-        else:
-            # if _message(msg):
-            #     msg = _message(msg)
-            # else:
-            #     msg = "Invalid"
-            if "extraCredit" in options.keys() and options["extraCredit"]:
-                if options["extraCredit"] != True:
-                    msg = options["extraCredit"]
-                else:
-                    msg = ""
-                msg = ": ".join(filter(lambda s: s is not '', ["Test Missed:", msg]))
-            else:
-                print Test.logFilter("<div class='console-failed'>Test Failed: ") + msg + \
-                      Test.logFilter("</div>", True)
-                error = Exception(msg)
-                if Test.describing:
-                    Test.failed.append(error)
-                else:
-                    raise error
+  @staticmethod
+  def assertNotEquals(actual, expected, msg=None, options={}):
+    #logCall('assertEquals')
+    if actual == expected:
+      msg = 'Not Expected: ' + Test.inspect(expected)
+      Test.expect(False, msg, options)
+    else:
+      if "successMsg" not in options.keys():
+        options["successMsg"] = "Value != " + Test.inspect(expected)
+      Test.expect(True, None, options)
 
-    @staticmethod
-    def assertEquals(actual, expected, msg=None, options={}):
-        #logCall('assertEquals')
-        if actual != expected:
-            msg = 'Expected: ' + Test.inspect(expected) + ', instead got: ' + Test.inspect(actual)
-            Test.expect(False, msg, options)
-        else:
-            if "successMsg" not in options.keys():
-                options["successMsg"] = "Value == " + Test.inspect(expected)
-            Test.expect(True, None, options)
+  class expectError(object):
+    def __init__(self, msg=None, options={}):
+      self.msg = msg
+      self.options = options
+    def __call__(self, fn):
+      passed = True
+      try:
+        fn()
+      except Exception as e:
+        print Test.logFilter('<b>Expected error was thrown:</b> %s' % e)
+        passed = True
+      else:
+        passed = False
+      Test.expect(passed, self.msg, self.options)
+      return True
 
-    @staticmethod
-    def assertNotEquals(actual, expected, msg=None, options={}):
-        #logCall('assertEquals')
-        if actual == expected:
-            msg = 'Not Expected: ' + Test.inspect(expected)
-            Test.expect(False, msg, options)
-        else:
-            if "successMsg" not in options.keys():
-                options["successMsg"] = "Value != " + Test.inspect(expected)
-            Test.expect(True, None, options)
-
-    class describe:
-        def __init__(self, msg):
-            self.msg = msg
-        def __enter__(self):
-            if Test.describing:
-                raise Exception("Cannot call describe within another describe")
-            #logCall("describe")
-            Test.describing = True
-            Test.html.append(Test.logFilter('<div class="console-describe"><h6>'))
-            Test.html.append(self.msg) #_message(msg)
-            Test.html.append(Test.logFilter(':</h6>'))
-
-        def __exit__(self, text, value, callback):
-            Test.html.append(Test.logFilter('</div>'))
-            print ''.join(Test.html)
-            Test.html = []
-            Test.describing = False
-            if len(Test.failed) > 0:
-                raise Test.failed[0]
-
-    class it:
-        def __init__(self, msg):
-            self.msg = msg
-        def __enter__(self):
-            #logCall('it')
-            Test.html.append(Test.logFilter('<div class="console-it"><h6>'))
-            Test.html.append(self.msg) #_message(msg)
-            Test.html.append(Test.logFilter(':</h6>'))
-            # TODO: handle callbacks
-        def __exit__(self, text, value, callback):
-            Test.html.append(Test.logFilter('</div>'))
-
-    class expectError:
-        def __init__(self, msg=None, options={}):
-            self.msg = msg
-            self.options = options
-        def __enter__(self):
-            pass
-        def __exit__(self, text, value, callback):
-            if text is not None: # error thrown
-                print Test.logFilter('<b>Expected error was thrown:</b> ' + value.message)
-                passed = True
-            else:
-                passed = False
-            Test.expect(passed, self.msg, self.options)
-            return True
-
-    class expectNoError:
-        def __init__(self, msg=None, options={}):
-            self.msg = msg
-            self.options = options
-        def __enter__(self):
-            pass
-        def __exit__(self, text, value, callback):
-            if text is not None: # error thrown
-                print Test.logFilter('<b>Expected error was thrown:</b> ' + value.message)
-                passed = True
-            else:
-                passed = False
-            Test.expect(passed, self.msg, self.options)
-            return True
+  class expectNoError(object):
+    def __init__(self, msg=None, options={}):
+      self.msg = msg
+      self.options = options
+    def __call__(self, fn):
+      passed = True
+      try:
+        fn()
+      except Exception as e:
+        print Test.logFilter('<b>Unexpected error was thrown:</b> %s' % e)
+        passed = False
+      else:
+        passed = True
+      Test.expect(passed, self.msg, self.options)
+      return True
 Test = Test()
+describe = Test.describe
+it = Test.it
